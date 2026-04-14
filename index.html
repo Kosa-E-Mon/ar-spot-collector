@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
+<title>AR観光 スポット収集</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<style>
+:root{
+  --green:#0B6E4F;--green-l:#E1F5EE;--green-d:#085041;
+  --blue:#185FA5;--blue-l:#E6F1FB;
+  --amber:#854F0B;--amber-l:#FAEEDA;
+  --red:#C0392B;--red-l:#FDEDED;
+  --bg:#fff;--bg2:#f5f4f0;--bg3:#ebe9e3;
+  --text:#1a1a1a;--text2:#5a5a5a;--text3:#9a9a9a;
+  --bdr:rgba(0,0,0,0.1);--bdr2:rgba(0,0,0,0.18);
+  --shadow:0 2px 14px rgba(0,0,0,0.13);
+}
+@media(prefers-color-scheme:dark){:root{
+  --bg:#1c1c1e;--bg2:#2c2c2e;--bg3:#3a3a3c;
+  --text:#f2f2f7;--text2:#aeaeb2;--text3:#636366;
+  --bdr:rgba(255,255,255,0.1);--bdr2:rgba(255,255,255,0.2);
+  --shadow:0 2px 14px rgba(0,0,0,0.45);
+  --green-l:#0a3326;--blue-l:#0a2540;--amber-l:#3d2505;--red-l:#3a1010;
+}}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;font-family:'Hiragino Sans','Noto Sans JP',sans-serif;background:var(--bg);color:var(--text);overflow:hidden}
+#app{display:flex;height:100vh}
+
+/* ── PC SIDEBAR ── */
+#sidebar{
+  width:360px;min-width:300px;flex-shrink:0;
+  display:flex;flex-direction:column;
+  border-right:0.5px solid var(--bdr2);
+  background:var(--bg2);height:100%;overflow:hidden;
+}
+@media(max-width:767px){#sidebar{display:none}}
+
+/* ── MAP AREA ── */
+#map-area{flex:1;position:relative;height:100%}
+#map{width:100%;height:100%}
+
+/* ─── MOBILE TOPBAR ─── */
+#m-topbar{
+  display:none;
+  position:absolute;top:0;left:0;right:0;z-index:900;
+  padding:10px 12px;align-items:center;gap:8px;
+  background:var(--bg);border-bottom:0.5px solid var(--bdr);
+}
+@media(max-width:767px){#m-topbar{display:flex}}
+.tb-title{font-size:14px;font-weight:700;flex:1}
+.tb-btn{padding:6px 11px;border-radius:8px;border:0.5px solid var(--bdr2);background:var(--bg2);color:var(--text);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
+.tb-btn.on{background:var(--green);color:#fff;border-color:var(--green)}
+
+/* ─── RANGE HUD (mobile) ─── */
+#hud{
+  display:none;
+  position:absolute;top:57px;left:10px;right:10px;z-index:800;
+  background:var(--bg);border:0.5px solid var(--bdr2);
+  border-radius:12px;padding:10px 13px;
+  box-shadow:var(--shadow);flex-direction:column;gap:5px;
+  pointer-events:none;
+}
+#hud.on{display:flex}
+#hud-main{font-size:13px;font-weight:700}
+#hud-chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{padding:4px 10px;border-radius:20px;font-size:12px;font-weight:600;display:inline-flex;align-items:center;gap:4px}
+
+/* ─── FABs (mobile) ─── */
+#fabs{
+  position:absolute;right:14px;bottom:190px;z-index:900;
+  display:flex;flex-direction:column;gap:12px;
+}
+@media(min-width:768px){#fabs{display:none}}
+.fab{
+  width:52px;height:52px;border-radius:50%;border:none;
+  color:#fff;font-size:22px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 3px 14px rgba(0,0,0,.28);
+  transition:transform .15s,background .2s;
+}
+.fab:active{transform:scale(.91)}
+
+/* ─── MOBILE PANEL ─── */
+#mpanel{
+  position:absolute;bottom:0;left:0;right:0;z-index:1000;
+  background:var(--bg);border-top:0.5px solid var(--bdr2);
+  border-radius:16px 16px 0 0;
+  padding:0 16px 32px;max-height:70vh;overflow-y:auto;
+  transform:translateY(100%);transition:transform .28s cubic-bezier(.4,0,.2,1);
+}
+#mpanel.show{transform:translateY(0)}
+.drag{width:36px;height:4px;border-radius:2px;background:var(--bdr2);margin:12px auto 14px}
+
+/* ─── PC MAP BADGE ─── */
+#pc-badge{
+  display:none;
+  position:absolute;top:12px;left:50%;transform:translateX(-50%);
+  z-index:800;background:var(--bg);border:0.5px solid var(--bdr2);
+  border-radius:10px;padding:8px 16px;
+  box-shadow:var(--shadow);align-items:center;gap:10px;
+  font-size:13px;font-weight:600;white-space:nowrap;
+}
+@media(min-width:768px){#pc-badge{display:flex}}
+#pc-badge-text{color:var(--text2)}
+
+/* ─── SIDEBAR PARTS ─── */
+.sb-head{padding:16px 16px 12px;border-bottom:0.5px solid var(--bdr);flex-shrink:0}
+.sb-title{font-size:16px;font-weight:700}
+.sb-sub{font-size:12px;color:var(--text2);margin-top:2px}
+.sb-tabs{display:flex;border-bottom:0.5px solid var(--bdr);flex-shrink:0}
+.sb-tab{
+  flex:1;padding:10px 8px;text-align:center;font-size:13px;font-weight:600;
+  cursor:pointer;color:var(--text2);border:none;border-bottom:2.5px solid transparent;
+  background:none;font-family:inherit;transition:color .15s;
+}
+.sb-tab.on{color:var(--green);border-bottom-color:var(--green)}
+.sb-body{flex:1;overflow-y:auto;padding:14px}
+.sb-foot{padding:10px 14px;border-top:0.5px solid var(--bdr);flex-shrink:0;display:flex;gap:8px}
+
+/* ─── SPOT CARD ─── */
+.sc{
+  background:var(--bg);border:0.5px solid var(--bdr);border-radius:10px;
+  padding:10px 12px;margin-bottom:8px;cursor:pointer;
+  transition:border-color .15s,box-shadow .15s;
+}
+.sc:hover{border-color:var(--green)}
+.sc.sel{border-color:var(--green);box-shadow:0 0 0 2px var(--green-l)}
+.sc-row{display:flex;align-items:center;gap:8px;margin-bottom:5px}
+.sc-dot{width:12px;height:12px;border-radius:50%;flex-shrink:0}
+.sc-name{font-size:14px;font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sc-tags{display:flex;gap:5px;flex-wrap:wrap}
+.sc-desc{font-size:12px;color:var(--text2);margin-top:5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* ─── FORM ─── */
+.fg{margin-bottom:11px}
+.fg label{display:block;font-size:11px;font-weight:600;color:var(--text2);margin-bottom:4px;letter-spacing:.05em;text-transform:uppercase}
+.fg input,.fg textarea{
+  width:100%;padding:9px 11px;border:0.5px solid var(--bdr2);border-radius:8px;
+  font-size:13px;background:var(--bg);color:var(--text);font-family:inherit;
+}
+.fg input:focus,.fg textarea:focus{outline:2px solid var(--green);outline-offset:1px;border-color:transparent}
+.fg textarea{resize:vertical;min-height:72px}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.rw{display:flex;align-items:center;gap:8px;margin-top:5px}
+.rw input[type=range]{flex:1;accent-color:var(--green)}
+.rv{min-width:38px;font-size:12px;font-weight:700;text-align:right}
+
+/* ─── BUTTONS ─── */
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:5px;
+  padding:9px 15px;border-radius:9px;border:none;
+  cursor:pointer;font-size:13px;font-weight:600;font-family:inherit;
+  transition:opacity .15s,transform .12s;
+}
+.btn:active{transform:scale(.95)}
+.btn-row{display:flex;gap:8px;margin-top:10px}
+.primary{background:var(--green);color:#fff}
+.ghost{background:var(--bg2);color:var(--text);border:0.5px solid var(--bdr2)}
+.danger{background:var(--red);color:#fff}
+.blue{background:var(--blue);color:#fff}
+.sm{padding:5px 11px;font-size:12px;border-radius:7px}
+.btn:disabled{opacity:.35;cursor:not-allowed}
+
+/* ─── TAGS ─── */
+.tag{display:inline-block;padding:2px 8px;border-radius:5px;font-size:11px;font-weight:600}
+.tg{background:var(--green-l);color:var(--green)}
+.tb{background:var(--blue-l);color:var(--blue)}
+.ta{background:var(--amber-l);color:var(--amber)}
+.tgr{background:var(--bg3);color:var(--text2)}
+
+/* ─── DIST CARD ─── */
+.dc{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-radius:10px;margin-bottom:10px}
+.dc-num{font-size:26px;font-weight:800;line-height:1}
+.dc-u{font-size:13px;font-weight:500;margin-left:1px}
+
+/* ─── GPS DOT ─── */
+.gps-w{width:16px;height:16px;position:relative;display:flex;align-items:center;justify-content:center}
+.gps-r{position:absolute;width:24px;height:24px;border-radius:50%;background:rgba(24,95,165,.22);animation:gr 1.8s ease-out infinite}
+.gps-d{width:12px;height:12px;background:var(--blue);border:2.5px solid #fff;border-radius:50%;position:relative;z-index:1}
+@keyframes gr{0%{transform:scale(.4);opacity:1}100%{transform:scale(2.4);opacity:0}}
+
+/* ─── EMPTY ─── */
+.empty{text-align:center;padding:32px 0;color:var(--text2)}
+.empty-i{font-size:36px;margin-bottom:10px}
+.empty-t{font-size:14px;font-weight:600;margin-bottom:4px}
+.empty-s{font-size:12px;color:var(--text3)}
+
+/* ─── TOAST ─── */
+#toast{
+  position:fixed;bottom:14px;left:50%;
+  transform:translateX(-50%) translateY(8px);
+  background:rgba(20,20,20,.9);color:#fff;
+  padding:9px 18px;border-radius:10px;font-size:13px;font-weight:500;
+  z-index:5000;white-space:nowrap;pointer-events:none;
+  opacity:0;transition:opacity .2s,transform .2s;
+}
+#toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- ════ SIDEBAR (PC) ════════════════════════════ -->
+<div id="sidebar">
+  <div class="sb-head">
+    <div class="sb-title">📍 AR観光 スポット収集</div>
+    <div class="sb-sub" id="sb-sub">スポット 0 件</div>
+  </div>
+  <div class="sb-tabs">
+    <button class="sb-tab on" id="t-list" onclick="showTab('list')">一覧</button>
+    <button class="sb-tab" id="t-add" onclick="showTab('add')">＋ 追加</button>
+    <button class="sb-tab" id="t-edit" style="display:none" onclick="showTab('edit')">✏️ 編集</button>
+  </div>
+  <div class="sb-body" id="sb-body"></div>
+  <div class="sb-foot">
+    <button class="btn ghost sm" style="flex:1" onclick="exportCSV()">📊 CSV</button>
+    <button class="btn ghost sm" style="flex:1" onclick="exportJSON()">📄 JSON</button>
+  </div>
+</div>
+
+<!-- ════ MAP ════════════════════════════════════ -->
+<div id="map-area">
+  <div id="map"></div>
+
+  <!-- PC badge -->
+  <div id="pc-badge">
+    <button class="btn ghost sm" onclick="centerOnMe()">📡 現在地</button>
+    <span id="pc-badge-text">位置情報を取得すると距離が表示されます</span>
+  </div>
+
+  <!-- Mobile topbar -->
+  <div id="m-topbar">
+    <span class="tb-title">📍 スポット収集</span>
+    <button class="tb-btn" id="track-btn" onclick="toggleTracking()">🧭 追跡OFF</button>
+    <button class="tb-btn" onclick="openList()">一覧 <span id="cnt">0</span></button>
+  </div>
+
+  <!-- Range HUD -->
+  <div id="hud">
+    <div id="hud-main">📡 現在地を取得中...</div>
+    <div id="hud-chips"></div>
+  </div>
+
+  <!-- FABs -->
+  <div id="fabs">
+    <button class="fab" style="background:var(--blue);font-size:18px" onclick="centerOnMe()">📡</button>
+    <button class="fab" id="fab-add" style="background:var(--green)" onclick="toggleAdd()">＋</button>
+  </div>
+
+  <!-- Mobile panel -->
+  <div id="mpanel">
+    <div class="drag"></div>
+    <div id="mp-body"></div>
+  </div>
+</div>
+</div>
+
+<div id="toast"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+/* ════════════════════════════════════
+   STATE
+════════════════════════════════════ */
+const COLORS=['#E84855','#F4A261','#2A9D8F','#6A4C93','#3D85C8','#D4A017','#0B6E4F','#E76F51'];
+let map,uMk=null,wid=null;
+let tracking=false,adding=false;
+let spots=[],lyrs={};
+let pLat=null,pLng=null,pMk=null,pCA=null,pCR=null;
+let selId=null,editId=null,tab='list';
+let ttimer=null;
+const mobile=()=>window.innerWidth<768;
+
+/* ════════════════════════════════════
+   INIT
+════════════════════════════════════ */
+window.addEventListener('load',()=>{
+  map=L.map('map',{zoomControl:false}).setView([34.6937,135.5022],15);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+    attribution:'© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',maxZoom:19
+  }).addTo(map);
+  L.control.zoom({position:'topright'}).addTo(map);
+  map.on('click',mapClick);
+  loadSpots();
+  renderList();
+  tryGPS();
+});
+
+/* ════════════════════════════════════
+   GPS
+════════════════════════════════════ */
+function tryGPS(){
+  if(!navigator.geolocation)return;
+  navigator.geolocation.getCurrentPosition(p=>{
+    map.setView([p.coords.latitude,p.coords.longitude],16);
+    setU(p.coords.latitude,p.coords.longitude);
+  },null,{enableHighAccuracy:true,timeout:8000});
+}
+function centerOnMe(){
+  if(!navigator.geolocation){toast('GPS非対応');return;}
+  toast('現在地取得中...');
+  navigator.geolocation.getCurrentPosition(p=>{
+    map.flyTo([p.coords.latitude,p.coords.longitude],17);
+    setU(p.coords.latitude,p.coords.longitude);
+    toast('現在地へ移動しました');
+  },()=>toast('GPS取得失敗'),{enableHighAccuracy:true,timeout:8000});
+}
+function setU(la,lo){
+  if(uMk)uMk.remove();
+  const ic=L.divIcon({html:`<div class="gps-w"><div class="gps-r"></div><div class="gps-d"></div></div>`,iconSize:[16,16],iconAnchor:[8,8],className:''});
+  uMk=L.marker([la,lo],{icon:ic,zIndexOffset:2000}).addTo(map);
+  updateHUD(la,lo);
+  updatePcBadge(la,lo);
+  if(selId){const sp=spots.find(s=>s.id===selId);if(sp)refreshDist(sp,la,lo);}
+}
+function toggleTracking(){
+  tracking=!tracking;
+  const b=document.getElementById('track-btn');
+  b.className='tb-btn'+(tracking?' on':'');
+  b.textContent=tracking?'🔵 追跡中':'🧭 追跡OFF';
+  const hud=document.getElementById('hud');
+  if(tracking){
+    hud.classList.add('on');
+    wid=navigator.geolocation.watchPosition(p=>{
+      map.panTo([p.coords.latitude,p.coords.longitude]);
+      setU(p.coords.latitude,p.coords.longitude);
+    },null,{enableHighAccuracy:true});
+  } else {
+    hud.classList.remove('on');
+    if(wid!=null)navigator.geolocation.clearWatch(wid);
+  }
+}
+
+/* ════════════════════════════════════
+   RANGE HUD (mobile realtime)
+════════════════════════════════════ */
+function hav(la1,lo1,la2,lo2){
+  const R=6371000,r=Math.PI/180;
+  const dL=(la2-la1)*r,dl=(lo2-lo1)*r;
+  const a=Math.sin(dL/2)**2+Math.cos(la1*r)*Math.cos(la2*r)*Math.sin(dl/2)**2;
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+function getState(sp,d){
+  if(d<=sp.arrivalRange)return'arrive';
+  if(d<=sp.approachRange)return'approach';
+  return'far';
+}
+function stateStyle(state){
+  if(state==='arrive')return{bg:'var(--green-l)',col:'var(--green)',icon:'✅',label:'到着圏内'};
+  if(state==='approach')return{bg:'var(--amber-l)',col:'var(--amber)',icon:'🟡',label:'接近圏内'};
+  return{bg:'var(--bg3)',col:'var(--text2)',icon:'⚪',label:'圏外'};
+}
+function updateHUD(la,lo){
+  if(!spots.length)return;
+  const res=spots.map(s=>({...s,d:Math.round(hav(la,lo,s.lat,s.lng)),state:getState(s,Math.round(hav(la,lo,s.lat,s.lng)))})).sort((a,b)=>a.d-b.d);
+  const inside=res.filter(r=>r.state!=='far');
+  const mainEl=document.getElementById('hud-main');
+  const chEl=document.getElementById('hud-chips');
+  if(inside.length){
+    const arr=inside.filter(r=>r.state==='arrive');
+    if(arr.length)mainEl.innerHTML=`<span style="color:var(--green)">✅ 到着圏内 — ${arr.map(r=>r.name).join('、')}</span>`;
+    else mainEl.innerHTML=`<span style="color:var(--amber)">🟡 接近中 — ${inside.map(r=>r.name).join('、')}</span>`;
+  } else {
+    const n=res[0];
+    mainEl.innerHTML=`<span style="color:var(--text2)">📍 最寄り: <b>${n.name}</b> ${n.d}m</span>`;
+  }
+  chEl.innerHTML=res.slice(0,3).map(r=>{
+    const st=stateStyle(r.state);
+    return`<span class="chip" style="background:${st.bg};color:${st.col}">${st.icon} ${r.name} <b>${r.d}m</b></span>`;
+  }).join('');
+}
+function updatePcBadge(la,lo){
+  const el=document.getElementById('pc-badge-text');if(!el)return;
+  if(!spots.length){el.textContent='現在地取得済み';el.style.color='var(--blue)';return;}
+  const n=spots.map(s=>({...s,d:Math.round(hav(la,lo,s.lat,s.lng))})).sort((a,b)=>a.d-b.d)[0];
+  const st=stateStyle(getState(n,n.d));
+  el.innerHTML=`${st.icon} 最寄: <b>${n.name}</b> — ${n.d}m (${st.label})`;
+  el.style.color=st.col;
+}
+
+/* ════════════════════════════════════
+   MAP CLICK / PIN
+════════════════════════════════════ */
+function mapClick(e){
+  if(adding)setPin(e.latlng.lat,e.latlng.lng);
+}
+function setPin(la,lo){
+  pLat=la;pLng=lo;
+  if(pMk)pMk.setLatLng([la,lo]);
+  else{
+    const ic=L.divIcon({html:`<div style="width:22px;height:22px;background:#0B6E4F;border:3px solid #fff;border-radius:50%;box-shadow:0 2px 8px rgba(0,0,0,.35)"></div>`,iconSize:[22,22],iconAnchor:[11,11],className:''});
+    pMk=L.marker([la,lo],{icon:ic,zIndexOffset:1500}).addTo(map);
+  }
+  updatePendCircles();
+  // sync form
+  const fl=document.getElementById('f-lat'),fn=document.getElementById('f-lng');
+  if(fl)fl.value=la.toFixed(6);
+  if(fn)fn.value=lo.toFixed(6);
+  const ps=document.getElementById('pin-st');
+  if(ps){ps.textContent='📍 ピン設置済み';ps.style.color='var(--green)';}
+  const ps2=document.getElementById('pin-st2');
+  if(ps2){ps2.textContent='📍 ピン設置済み';ps2.style.color='var(--green)';}
+}
+function updatePendCircles(){
+  if(!pLat)return;
+  const ap=parseInt(document.getElementById('f-ap')?.value??50);
+  const ar=parseInt(document.getElementById('f-ar')?.value??15);
+  if(pCA)pCA.remove();if(pCR)pCR.remove();
+  pCA=L.circle([pLat,pLng],{radius:ap,color:'#0B6E4F',fillColor:'#0B6E4F',fillOpacity:.06,weight:2,dashArray:'8,5'}).addTo(map);
+  pCR=L.circle([pLat,pLng],{radius:ar,color:'#185FA5',fillColor:'#185FA5',fillOpacity:.18,weight:2}).addTo(map);
+}
+function clearPend(){
+  if(pMk){pMk.remove();pMk=null;}
+  if(pCA){pCA.remove();pCA=null;}
+  if(pCR){pCR.remove();pCR=null;}
+  pLat=null;pLng=null;
+}
+function useCurLocPin(){
+  if(!navigator.geolocation){toast('GPS非対応');return;}
+  toast('GPS取得中...');
+  navigator.geolocation.getCurrentPosition(p=>{
+    const{latitude:la,longitude:lo}=p.coords;
+    map.panTo([la,lo]);setU(la,lo);setPin(la,lo);
+    toast('現在地をピンに設定しました');
+  },()=>toast('GPS取得失敗'),{enableHighAccuracy:true,timeout:8000});
+}
+
+/* ════════════════════════════════════
+   ADD MODE
+════════════════════════════════════ */
+function toggleAdd(){
+  adding=!adding;
+  const fab=document.getElementById('fab-add');
+  if(adding){
+    fab.style.background='#C0392B';fab.textContent='✕';
+    showPanel(addFormHTML());
+    toast('地図をタップしてピンを置いてください');
+  } else {
+    fab.style.background='';fab.textContent='＋';
+    clearPend();hidePanel();
+  }
+}
+function addFormHTML(){
+  return`
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+    <b style="font-size:14px">＋ スポット追加</b>
+    <button class="btn blue sm" onclick="useCurLocPin()">📡 現在地をピンに</button>
+  </div>
+  <div id="pin-st" style="font-size:12px;color:var(--text2);margin-bottom:10px;padding:7px 10px;background:var(--bg3);border-radius:8px">${pLat?'📍 ピン設置済み':'🗺️ 地図をタップしてピンを置いてください'}</div>
+  <div class="fg"><label>スポット名 *</label><input id="f-name" placeholder="例：大阪城 天守閣"/></div>
+  <div class="g2">
+    <div class="fg"><label>緯度</label><input id="f-lat" value="${pLat?pLat.toFixed(6):''}" placeholder="34.xxxxx" style="font-family:monospace;font-size:12px" oninput="coordIn()"/></div>
+    <div class="fg"><label>経度</label><input id="f-lng" value="${pLng?pLng.toFixed(6):''}" placeholder="135.xxxxx" style="font-family:monospace;font-size:12px" oninput="coordIn()"/></div>
+  </div>
+  <div class="fg">
+    <label>接近レンジ <span style="color:#0B6E4F">●</span> 破線の円</label>
+    <div class="rw"><input type="range" id="f-ap" min="10" max="500" value="50" step="5" oninput="pendRng()"/><span class="rv" style="color:#0B6E4F" id="f-ap-v">50m</span></div>
+  </div>
+  <div class="fg">
+    <label>到着レンジ <span style="color:#185FA5">●</span> 塗りつぶしの円</label>
+    <div class="rw"><input type="range" id="f-ar" min="5" max="200" value="15" step="5" oninput="pendRng()"/><span class="rv" style="color:#185FA5" id="f-ar-v">15m</span></div>
+  </div>
+  <div class="btn-row">
+    <button class="btn ghost" style="flex:1" onclick="cancelAdd()">キャンセル</button>
+    <button class="btn primary" style="flex:2" onclick="doSave()">✓ 保存する</button>
+  </div>`;
+}
+function coordIn(){
+  const la=parseFloat(document.getElementById('f-lat').value),lo=parseFloat(document.getElementById('f-lng').value);
+  if(isNaN(la)||isNaN(lo))return;
+  if(pMk)pMk.setLatLng([la,lo]);
+  pLat=la;pLng=lo;updatePendCircles();
+}
+function pendRng(){
+  const ap=document.getElementById('f-ap')?.value,ar=document.getElementById('f-ar')?.value;
+  if(ap){const el=document.getElementById('f-ap-v');if(el)el.textContent=ap+'m';}
+  if(ar){const el=document.getElementById('f-ar-v');if(el)el.textContent=ar+'m';}
+  updatePendCircles();
+}
+function cancelAdd(){
+  adding=false;
+  const fab=document.getElementById('fab-add');if(fab){fab.style.background='';fab.textContent='＋';}
+  clearPend();
+  if(mobile())hidePanel();else showTab('list');
+}
+function doSave(){
+  const nm=(document.getElementById('f-name')?.value||'').trim();
+  if(!nm){toast('スポット名を入力してください');return;}
+  if(!pLat){toast('地図にピンを置いてください');return;}
+  const sp={
+    id:'S'+Date.now().toString(36).toUpperCase(),
+    name:nm,lat:pLat,lng:pLng,
+    approachRange:parseInt(document.getElementById('f-ap').value),
+    arrivalRange:parseInt(document.getElementById('f-ar').value),
+    description:'',nextGuide:'',note:'',
+    color:COLORS[spots.length%COLORS.length],
+    createdAt:new Date().toISOString()
+  };
+  spots.push(sp);addLyr(sp);save();clearPend();
+  adding=false;
+  const fab=document.getElementById('fab-add');if(fab){fab.style.background='';fab.textContent='＋';}
+  updateCount();
+  selId=sp.id;
+  if(mobile()){showDetail(sp);}
+  else{editId=sp.id;showTab('edit');}
+  toast('保存しました！説明文を入力してください');
+}
+
+/* ════════════════════════════════════
+   SPOT LAYERS
+════════════════════════════════════ */
+function addLyr(sp){
+  const ic=L.divIcon({html:`<div style="width:20px;height:20px;background:${sp.color};border:2.5px solid #fff;border-radius:50%;box-shadow:0 2px 6px rgba(0,0,0,.3)"></div>`,iconSize:[20,20],iconAnchor:[10,10],className:''});
+  const mk=L.marker([sp.lat,sp.lng],{icon:ic}).addTo(map);
+  mk.on('click',e=>{L.DomEvent.stop(e);spotClick(sp.id);});
+  const ca=L.circle([sp.lat,sp.lng],{radius:sp.approachRange,color:sp.color,fillColor:sp.color,fillOpacity:.06,weight:1.5,dashArray:'8,5'}).addTo(map);
+  const cr=L.circle([sp.lat,sp.lng],{radius:sp.arrivalRange,color:sp.color,fillColor:sp.color,fillOpacity:.18,weight:1.5}).addTo(map);
+  lyrs[sp.id]={mk,ca,cr};
+}
+function remLyr(id){if(!lyrs[id])return;lyrs[id].mk.remove();lyrs[id].ca.remove();lyrs[id].cr.remove();delete lyrs[id];}
+function redrawCircles(sp){
+  if(!lyrs[sp.id])return;
+  lyrs[sp.id].ca.remove();lyrs[sp.id].cr.remove();
+  lyrs[sp.id].ca=L.circle([sp.lat,sp.lng],{radius:sp.approachRange,color:sp.color,fillColor:sp.color,fillOpacity:.06,weight:1.5,dashArray:'8,5'}).addTo(map);
+  lyrs[sp.id].cr=L.circle([sp.lat,sp.lng],{radius:sp.arrivalRange,color:sp.color,fillColor:sp.color,fillOpacity:.18,weight:1.5}).addTo(map);
+}
+
+/* ════════════════════════════════════
+   SPOT DETAIL (mobile)
+════════════════════════════════════ */
+function spotClick(id){
+  selId=id;
+  const sp=spots.find(s=>s.id===id);if(!sp)return;
+  map.panTo([sp.lat,sp.lng]);
+  if(mobile())showDetail(sp);
+  else{editId=id;showTab('edit');}
+}
+function showDetail(sp){
+  showPanel(detailHTML(sp));
+}
+function detailHTML(sp){
+  let dh='';
+  if(uMk){
+    const u=uMk.getLatLng(),d=Math.round(hav(u.lat,u.lng,sp.lat,sp.lng));
+    const st=stateStyle(getState(sp,d));
+    dh=`<div class="dc" id="dd-dist" style="background:${st.bg}"><span style="font-size:13px;font-weight:700;color:${st.col}">${st.icon} ${st.label}</span><span style="color:${st.col}"><span class="dc-num">${d}</span><span class="dc-u">m</span></span></div>`;
+  }
+  return`
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+    <div style="width:13px;height:13px;border-radius:50%;background:${sp.color};flex-shrink:0"></div>
+    <span style="font-size:15px;font-weight:700;flex:1">${sp.name}</span>
+    <button class="btn ghost sm" onclick="openMEdit('${sp.id}')">編集</button>
+    <button class="btn sm" style="background:var(--red-l);color:var(--red);border:0.5px solid #f5c6c6" onclick="askDel('${sp.id}')">削除</button>
+  </div>
+  <div id="dd-dist">${dh}</div>
+  <div class="fg">
+    <label>接近レンジ <span style="color:#0B6E4F">●</span></label>
+    <div class="rw"><input type="range" min="10" max="500" value="${sp.approachRange}" step="5" oninput="liveRng('${sp.id}','ap',this.value)"/><span class="rv" style="color:#0B6E4F" id="lr-ap-${sp.id}">${sp.approachRange}m</span></div>
+  </div>
+  <div class="fg">
+    <label>到着レンジ <span style="color:#185FA5">●</span></label>
+    <div class="rw"><input type="range" min="5" max="200" value="${sp.arrivalRange}" step="5" oninput="liveRng('${sp.id}','ar',this.value)"/><span class="rv" style="color:#185FA5" id="lr-ar-${sp.id}">${sp.arrivalRange}m</span></div>
+  </div>
+  <div style="font-size:11px;color:var(--text3);font-family:monospace;margin-bottom:8px">${sp.lat.toFixed(6)}, ${sp.lng.toFixed(6)}</div>
+  ${sp.description?`<div style="font-size:13px;color:var(--text2);background:var(--bg2);padding:8px 10px;border-radius:8px;margin-bottom:8px">${sp.description}</div>`:'<div style="font-size:12px;color:var(--text3);margin-bottom:8px">説明文はPCから編集できます</div>'}
+  <button class="btn ghost sm" style="width:100%" onclick="hidePanel()">閉じる</button>`;
+}
+function refreshDist(sp,la,lo){
+  const el=document.getElementById('dd-dist');if(!el)return;
+  const d=Math.round(hav(la,lo,sp.lat,sp.lng));
+  const st=stateStyle(getState(sp,d));
+  el.innerHTML=`<div class="dc" style="background:${st.bg}"><span style="font-size:13px;font-weight:700;color:${st.col}">${st.icon} ${st.label}</span><span style="color:${st.col}"><span class="dc-num">${d}</span><span class="dc-u">m</span></span></div>`;
+}
+function liveRng(id,type,val){
+  const sp=spots.find(s=>s.id===id);if(!sp)return;
+  const n=parseInt(val);
+  if(type==='ap'){sp.approachRange=n;const el=document.getElementById('lr-ap-'+id);if(el)el.textContent=n+'m';}
+  else{sp.arrivalRange=n;const el=document.getElementById('lr-ar-'+id);if(el)el.textContent=n+'m';}
+  redrawCircles(sp);save();
+  if(uMk){const u=uMk.getLatLng();refreshDist(sp,u.lat,u.lng);updateHUD(u.lat,u.lng);}
+  // also sync PC badge
+  if(uMk){const u=uMk.getLatLng();updatePcBadge(u.lat,u.lng);}
+}
+function openMEdit(id){
+  const sp=spots.find(s=>s.id===id);if(!sp)return;
+  showPanel(`
+  <b style="font-size:14px;display:block;margin-bottom:12px">✏️ スポットを編集</b>
+  <div class="fg"><label>スポット名</label><input id="me-name" value="${sp.name}"/></div>
+  <div class="fg"><label>説明文</label><textarea id="me-desc">${sp.description||''}</textarea></div>
+  <div class="fg"><label>メモ</label><input id="me-note" value="${sp.note||''}"/></div>
+  <div class="btn-row">
+    <button class="btn ghost" style="flex:1" onclick="showDetail(spots.find(s=>s.id==='${sp.id}'))">戻る</button>
+    <button class="btn primary" style="flex:2" onclick="applyMEdit('${sp.id}')">✓ 更新</button>
+  </div>`);
+}
+function applyMEdit(id){
+  const sp=spots.find(s=>s.id===id);if(!sp)return;
+  sp.name=document.getElementById('me-name').value.trim()||sp.name;
+  sp.description=document.getElementById('me-desc').value;
+  sp.note=document.getElementById('me-note').value;
+  // re-bind click
+  if(lyrs[id]){lyrs[id].mk.off('click');lyrs[id].mk.on('click',e=>{L.DomEvent.stop(e);spotClick(id);});}
+  save();renderList();toast('更新しました');showDetail(sp);
+}
+function askDel(id){
+  const sp=spots.find(s=>s.id===id);if(!sp)return;
+  showPanel(`<div style="text-align:center;padding:16px 0 8px">
+    <div style="font-size:32px;margin-bottom:10px">🗑️</div>
+    <div style="font-size:15px;font-weight:700;margin-bottom:6px">「${sp.name}」を削除しますか？</div>
+    <div style="font-size:12px;color:var(--text2);margin-bottom:20px">この操作は元に戻せません。</div>
+    <div class="btn-row"><button class="btn ghost" style="flex:1" onclick="showDetail(spots.find(s=>s.id==='${id}'))">キャンセル</button><button class="btn danger" style="flex:1" onclick="doDel('${id}')">削除する</button></div>
+  </div>`);
+}
+function doDel(id){
+  spots=spots.filter(s=>s.id!==id);remLyr(id);
+  if(selId===id)selId=null;if(editId===id){editId=null;const et=document.getElementById('t-edit');if(et)et.style.display='none';}
+  save();updateCount();renderList();toast('削除しました');hidePanel();
+}
+
+/* ════════════════════════════════════
+   SIDEBAR TABS (PC)
+════════════════════════════════════ */
+function showTab(t){
+  tab=t;
+  ['list','add','edit'].forEach(n=>{
+    const el=document.getElementById('t-'+n);
+    if(el)el.className='sb-tab'+(n===t?' on':'');
+  });
+  if(t==='list')renderList();
+  else if(t==='add'){adding=true;renderAddPC();}
+  else if(t==='edit'&&editId){const sp=spots.find(s=>s.id===editId);if(sp)renderEditPC(sp);}
+}
+function renderList(){
+  tab='list';
+  const b=document.getElementById('sb-body');if(!b)return;
+  ['list','add','edit'].forEach(n=>{const el=document.getElementById('t-'+n);if(el)el.className='sb-tab'+(n==='list'?' on':'');});
+  if(!spots.length){
+    b.innerHTML=`<div class="empty"><div class="empty-i">🗾</div><div class="empty-t">スポットがありません</div><div class="empty-s">「＋ 追加」タブまたはスマホの「＋」ボタンから登録してください</div></div>`;
+    return;
+  }
+  b.innerHTML=spots.map(sp=>`
+  <div class="sc${selId===sp.id?' sel':''}" onclick="spotClick('${sp.id}')">
+    <div class="sc-row"><div class="sc-dot" style="background:${sp.color}"></div><div class="sc-name">${sp.name}</div></div>
+    <div class="sc-tags"><span class="tag tg">接近 ${sp.approachRange}m</span><span class="tag tb">到着 ${sp.arrivalRange}m</span><span class="tag tgr">${sp.id}</span></div>
+    ${sp.description?`<div class="sc-desc">${sp.description}</div>`:''}
+  </div>`).join('');
+}
+function renderAddPC(){
+  const b=document.getElementById('sb-body');if(!b)return;
+  b.innerHTML=`
+  <div style="margin-bottom:14px">
+    <b style="font-size:14px">新しいスポットを追加</b>
+    <div style="font-size:12px;color:var(--text2);margin-top:3px">地図をクリックしてピンを設置してください</div>
+  </div>
+  <div id="pin-st2" style="font-size:12px;color:var(--text2);margin-bottom:12px;padding:8px 10px;background:var(--bg3);border-radius:8px">${pLat?'📍 ピン設置済み':'🗺️ 地図をクリックしてピンを設置してください'}</div>
+  <div class="fg"><label>スポット名 *</label><input id="f-name" placeholder="例：大阪城 天守閣"/></div>
+  <div class="g2">
+    <div class="fg"><label>緯度</label><input id="f-lat" value="${pLat?pLat.toFixed(6):''}" placeholder="34.xxxxx" style="font-family:monospace;font-size:12px" oninput="coordIn()"/></div>
+    <div class="fg"><label>経度</label><input id="f-lng" value="${pLng?pLng.toFixed(6):''}" placeholder="135.xxxxx" style="font-family:monospace;font-size:12px" oninput="coordIn()"/></div>
+  </div>
+  <div class="fg">
+    <label>接近レンジ <span style="color:#0B6E4F">●</span></label>
+    <div class="rw"><input type="range" id="f-ap" min="10" max="500" value="50" step="5" oninput="pendRng()"/><span class="rv" style="color:#0B6E4F" id="f-ap-v">50m</span></div>
+  </div>
+  <div class="fg">
+    <label>到着レンジ <span style="color:#185FA5">●</span></label>
+    <div class="rw"><input type="range" id="f-ar" min="5" max="200" value="15" step="5" oninput="pendRng()"/><span class="rv" style="color:#185FA5" id="f-ar-v">15m</span></div>
+  </div>
+  <div class="btn-row">
+    <button class="btn ghost" style="flex:1" onclick="cancelAdd()">キャンセル</button>
+    <button class="btn primary" style="flex:2" onclick="doSave()">✓ 保存する</button>
+  </div>`;
+  toast('地図をクリックしてピンを置いてください');
+}
+function renderEditPC(sp){
+  const b=document.getElementById('sb-body');if(!b)return;
+  const et=document.getElementById('t-edit');if(et)et.style.display='';
+  b.innerHTML=`
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
+    <div style="width:13px;height:13px;border-radius:50%;background:${sp.color};flex-shrink:0"></div>
+    <div><div style="font-size:15px;font-weight:700">${sp.name}</div><div style="font-size:11px;color:var(--text3);font-family:monospace">${sp.id}</div></div>
+  </div>
+  <div class="fg"><label>スポット名</label><input id="e-name" value="${sp.name}"/></div>
+  <div class="g2">
+    <div class="fg"><label>緯度</label><input id="e-lat" value="${sp.lat.toFixed(6)}" style="font-family:monospace;font-size:12px" oninput="editCoord('${sp.id}')"/></div>
+    <div class="fg"><label>経度</label><input id="e-lng" value="${sp.lng.toFixed(6)}" style="font-family:monospace;font-size:12px" oninput="editCoord('${sp.id}')"/></div>
+  </div>
+  <div class="fg">
+    <label>接近レンジ <span style="color:#0B6E4F">●</span></label>
+    <div class="rw"><input type="range" id="e-ap" min="10" max="500" value="${sp.approachRange}" step="5" oninput="liveRng('${sp.id}','ap',this.value);document.getElementById('e-ap-v').textContent=this.value+'m'"/><span class="rv" style="color:#0B6E4F" id="e-ap-v">${sp.approachRange}m</span></div>
+  </div>
+  <div class="fg">
+    <label>到着レンジ <span style="color:#185FA5">●</span></label>
+    <div class="rw"><input type="range" id="e-ar" min="5" max="200" value="${sp.arrivalRange}" step="5" oninput="liveRng('${sp.id}','ar',this.value);document.getElementById('e-ar-v').textContent=this.value+'m'"/><span class="rv" style="color:#185FA5" id="e-ar-v">${sp.arrivalRange}m</span></div>
+  </div>
+  <div class="fg"><label>解説テキスト（音声読み上げ原稿）</label><textarea id="e-desc" rows="5" placeholder="観光客向けの音声案内テキストを入力してください">${sp.description||''}</textarea></div>
+  <div class="fg"><label>次の目的地案内</label><input id="e-next" placeholder="「次は○○へ向かいます」" value="${sp.nextGuide||''}"/></div>
+  <div class="fg"><label>メモ（内部用）</label><input id="e-note" value="${sp.note||''}"/></div>
+  <div class="btn-row">
+    <button class="btn sm" style="background:var(--red-l);color:var(--red);border:0.5px solid #f5c6c6" onclick="askDelPC('${sp.id}')">削除</button>
+    <div style="flex:1"></div>
+    <button class="btn primary" onclick="applyEdit('${sp.id}')">✓ 更新する</button>
+  </div>`;
+}
+function editCoord(id){
+  const la=parseFloat(document.getElementById('e-lat').value),lo=parseFloat(document.getElementById('e-lng').value);
+  if(isNaN(la)||isNaN(lo))return;
+  const sp=spots.find(s=>s.id===id);if(!sp)return;
+  sp.lat=la;sp.lng=lo;
+  if(lyrs[id]){lyrs[id].mk.setLatLng([la,lo]);lyrs[id].ca.setLatLng([la,lo]);lyrs[id].cr.setLatLng([la,lo]);}
+}
+function applyEdit(id){
+  const sp=spots.find(s=>s.id===id);if(!sp)return;
+  sp.name=document.getElementById('e-name').value.trim()||sp.name;
+  sp.lat=parseFloat(document.getElementById('e-lat').value)||sp.lat;
+  sp.lng=parseFloat(document.getElementById('e-lng').value)||sp.lng;
+  sp.approachRange=parseInt(document.getElementById('e-ap').value);
+  sp.arrivalRange=parseInt(document.getElementById('e-ar').value);
+  sp.description=document.getElementById('e-desc').value;
+  sp.nextGuide=document.getElementById('e-next').value;
+  sp.note=document.getElementById('e-note').value;
+  remLyr(id);addLyr(sp);save();renderList();toast('更新しました ✓');
+  setTimeout(()=>{editId=id;showTab('edit');},80);
+}
+function askDelPC(id){
+  const sp=spots.find(s=>s.id===id);if(!sp)return;
+  if(!confirm(`「${sp.name}」を削除しますか？`))return;
+  doDel(id);
+  const et=document.getElementById('t-edit');if(et)et.style.display='none';
+  showTab('list');
+}
+
+/* ════════════════════════════════════
+   MOBILE LIST
+════════════════════════════════════ */
+function openList(){
+  const b=document.getElementById('mp-body');
+  const p=document.getElementById('mpanel');
+  if(p.classList.contains('show')&&b.dataset.view==='list'){hidePanel();return;}
+  b.dataset.view='list';
+  showPanel(mListHTML());
+}
+function mListHTML(){
+  if(!spots.length)return`<div class="empty"><div class="empty-i">📍</div><div class="empty-t">スポットがありません</div><div class="empty-s">「＋」から追加してください</div></div>`;
+  return`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><b style="font-size:13px;color:var(--text2)">登録スポット (${spots.length}件)</b><div style="display:flex;gap:6px"><button class="btn ghost sm" onclick="exportCSV()">📊</button><button class="btn ghost sm" onclick="exportJSON()">📄</button></div></div>
+  ${spots.map(sp=>`<div class="sc" onclick="spotClick('${sp.id}')"><div class="sc-row"><div class="sc-dot" style="background:${sp.color}"></div><div class="sc-name">${sp.name}</div></div><div class="sc-tags"><span class="tag tg">${sp.approachRange}m</span><span class="tag tb">${sp.arrivalRange}m</span></div></div>`).join('')}`;
+}
+function showPanel(html){
+  document.getElementById('mp-body').innerHTML=html;
+  document.getElementById('mpanel').classList.add('show');
+}
+function hidePanel(){document.getElementById('mpanel').classList.remove('show');}
+
+/* ════════════════════════════════════
+   EXPORT / PERSIST
+════════════════════════════════════ */
+function exportCSV(){
+  if(!spots.length){toast('スポットがありません');return;}
+  const h=['ID','スポット名','緯度','経度','接近レンジ(m)','到着レンジ(m)','解説テキスト','次の目的地案内','メモ','登録日時'];
+  const rows=spots.map(s=>[s.id,`"${s.name}"`,s.lat.toFixed(6),s.lng.toFixed(6),s.approachRange,s.arrivalRange,`"${(s.description||'').replace(/"/g,'""')}"`,`"${(s.nextGuide||'').replace(/"/g,'""')}"`,`"${(s.note||'').replace(/"/g,'""')}"`,s.createdAt]);
+  dl(new Blob(['\uFEFF'+[h,...rows].map(r=>r.join(',')).join('\n')],{type:'text/csv;charset=utf-8;'}),'spots_'+dt()+'.csv');
+  toast('CSVをダウンロードしました');
+}
+function exportJSON(){
+  if(!spots.length){toast('スポットがありません');return;}
+  dl(new Blob([JSON.stringify(spots,null,2)],{type:'application/json'}),'spots_'+dt()+'.json');
+  toast('JSONをダウンロードしました');
+}
+function dl(blob,name){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click();URL.revokeObjectURL(a.href);}
+function dt(){return new Date().toISOString().slice(0,10);}
+function save(){try{localStorage.setItem('ar_spots',JSON.stringify(spots));}catch(e){}}
+function loadSpots(){
+  try{const d=localStorage.getItem('ar_spots');if(!d)return;spots=JSON.parse(d);spots.forEach(addLyr);updateCount();}catch(e){spots=[];}
+}
+function updateCount(){
+  document.getElementById('cnt').textContent=spots.length;
+  const sb=document.getElementById('sb-sub');if(sb)sb.textContent=`スポット ${spots.length} 件登録済み`;
+}
+function toast(msg){
+  const el=document.getElementById('toast');el.textContent=msg;el.classList.add('on');
+  if(ttimer)clearTimeout(ttimer);
+  ttimer=setTimeout(()=>el.classList.remove('on'),2600);
+}
+</script>
+</body>
+</html>
